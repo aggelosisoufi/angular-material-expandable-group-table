@@ -1,12 +1,135 @@
-import { Component } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
+import { Component, OnInit } from '@angular/core';
+import { Employee } from './models/Employee';
+import { Department } from './models/Department';
+import { Status } from './models/Status';
+import { GroupRow, SubGroupRow } from './models/RowTypes';
+
+import { DataService } from './services/data.service';
+import { DepartmentService } from './services/department.service';
+import { StatusService } from './services/status.service';
+
+import { MatTableDataSource } from '@angular/material/table';
+import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatIconModule } from '@angular/material/icon';
+import { MatTableModule } from '@angular/material/table';
+import { MatFormField } from '@angular/material/form-field';
+import { MatSelectModule } from '@angular/material/select';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { FormsModule } from '@angular/forms';
+
+import { CommonModule } from '@angular/common';
+
+
+// Group by various options
+// Editable fields for each employee
+// Add a new employee
+// Delete an employee
+// Save the changes to the employees
+// Filtering the sub rows by each column
+// Sorting by various options
+// The group rows should have an counter of the number of employees in that group
+// The table should be responsive and adapt to the screen size
+// Checkboxes for selecting employees and a button to delete them
+
+
+type groupByFields = 'department' | 'status' | 'role';
+type RowType = GroupRow | SubGroupRow;
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet],
+  imports: [
+    MatTableModule,
+    MatCheckboxModule,
+    MatIconModule,
+    MatFormField,
+    CommonModule,
+    MatSelectModule,
+    MatFormFieldModule,
+    FormsModule],
   templateUrl: './app.component.html',
   styleUrl: './app.component.css'
 })
-export class AppComponent {
-  title = 'grouped-material-table';
+export class AppComponent implements OnInit {
+  title = 'Employee Management System';
+  employees: Employee[] = [];
+  departments: Department[] = [];
+  statuses: Status[] = [];
+  departmentMap: Map<number, string> = new Map();
+  statusMap: Map<number, [string, string]> = new Map();
+
+  dataSource: MatTableDataSource<RowType> = new MatTableDataSource();
+
+  displayedColumns: string[] = ['name', 'department', 'role', 'status', 'actions'];
+  groupByOptions = [
+    { value: 'department', viewValue: 'Department' },
+    { value: 'role', viewValue: 'Role' },
+    { value: 'status', viewValue: 'Status' },
+  ];
+  selectedGroupBy: groupByFields = 'role';
+
+  constructor(private dataService: DataService,
+    private departmentService: DepartmentService,
+    private statusService: StatusService) {}
+
+  ngOnInit() {
+    // Retrieve data from the services. First the employees, then the departments and statuses.
+    this.employees = this.dataService.generateMockEmployees(50);
+    this.departments = this.departmentService.getDepartments();
+    this.statuses = this.statusService.getStatuses();
+
+    this.departmentMap = new Map(this.departments.map(dep => [dep.id, dep.name]));
+    this.statusMap = new Map(this.statuses.map(status => [status.id, [status.label, status.color]]));
+
+    this.dataSource.data = this.groupBy(this.selectedGroupBy, this.employees);
+  }
+
+  isGroupRow = (index: number, row: RowType): row is GroupRow => row.isGroup === true;
+
+  isSubRow = (index: number, row: RowType): row is SubGroupRow => row.isGroup === false;
+
+  /** User can chnage the grouping dynamically via a drop down */
+  onGroupByChange(field: groupByFields) {
+    this.dataSource.data = this.groupBy(field, this.dataSource.data.filter(row => !row.isGroup));
+  }
+
+  /** Group rows by a specific field and return a list of Group rows followed by their Sub Group rows */
+  private groupBy(field: groupByFields, employees: Employee[]): RowType[] {
+    const groupMap = new Map<string, Employee[]>();
+
+    // Group employees by the specified field's value
+    employees.forEach(employee => {
+      const groupKey = String(employee[field]);
+      if (!groupMap.has(groupKey)) {
+        groupMap.set(groupKey, []);
+      }
+      groupMap.get(groupKey)?.push(employee);
+    });
+
+    // Return the grouped data as an array of RowType
+    return Array.from(groupMap.entries()).flatMap(([rawKey, employees]) => {
+      let groupLabel = rawKey;
+
+      if (field === 'department') {
+        groupLabel = this.departmentMap.get(+rawKey) || 'Unknown Department';
+      } else if (field === 'status') {
+        groupLabel = this.statusMap.get(+rawKey)?.[0] || 'Unknown Status';
+    }
+
+      const groupRow: GroupRow = {
+        isGroup: true,
+        totalCountOfSubRows: employees.length,
+        groupName: groupLabel,
+        expanded: false
+      };
+
+      const subGroupRows: SubGroupRow[] = employees.map(employee => ({
+        ...employee,
+        isGroup: false,
+        group: groupRow
+      }));
+
+      return [groupRow, ...subGroupRows];
+    });
+  }
+
 }
