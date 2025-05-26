@@ -18,15 +18,16 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { FormsModule } from '@angular/forms';
 
 import { CommonModule } from '@angular/common';
+import { Sort, MatSortModule } from '@angular/material/sort';
 
 
-// Group by various options
+// Group by various options -> DONE
 // Editable fields for each employee
 // Add a new employee
 // Delete an employee
 // Save the changes to the employees
 // Filtering the sub rows by each column
-// Sorting by various options
+// Sorting by various options -> DONE
 // The group rows should have an counter of the number of employees in that group
 // The table should be responsive and adapt to the screen size
 // Checkboxes for selecting employees and a button to delete them
@@ -45,6 +46,7 @@ type RowType = GroupRow | SubGroupRow;
     CommonModule,
     MatSelectModule,
     MatFormFieldModule,
+    MatSortModule,
     FormsModule],
   templateUrl: './app.component.html',
   styleUrl: './app.component.css'
@@ -87,9 +89,51 @@ export class AppComponent implements OnInit {
 
   isSubRow = (index: number, row: RowType): row is SubGroupRow => row.isGroup === false;
 
-  /** User can chnage the grouping dynamically via a drop down */
+  /** User can chanage the grouping dynamically via a drop down */
   onGroupByChange(field: groupByFields) {
     this.dataSource.data = this.groupBy(field, this.dataSource.data.filter(row => !row.isGroup));
+  }
+
+  /** Sort results withing groups by  Name or Department or Role*/
+  sortData(sort: Sort) {
+    if (!sort.active || sort.direction === '') {
+      return;
+    }
+
+    const newData: RowType[] = [];
+    let i = 0;
+
+    while (i < this.dataSource.data.length) {
+      const row = this.dataSource.data[i];
+
+      if (row.isGroup) {
+        const groupRow = row;
+        const subRows: SubGroupRow[] = [];
+
+        // Gather all rows in this group
+        i++;
+        while (i < this.dataSource.data.length && !this.dataSource.data[i].isGroup) {
+          subRows.push(this.dataSource.data[i] as SubGroupRow);
+          i++;
+        }
+
+        // Sort sub-rows within this group
+        subRows.sort((a, b) => {
+          const isAsc = sort.direction === 'asc';
+          const aVal = this.getDisplayValue(a, sort.active);
+          const bVal = this.getDisplayValue(b, sort.active);
+          return this.compare(aVal, bVal, isAsc);
+        });
+
+        newData.push(groupRow, ...subRows);
+      } else {
+        // Shouldn’t happen, but we handle it gracefully
+        newData.push(row);
+        i++;
+      }
+    }
+
+    this.dataSource.data = newData;
   }
 
   /** Group rows by a specific field and return a list of Group rows followed by their Sub Group rows */
@@ -130,6 +174,24 @@ export class AppComponent implements OnInit {
 
       return [groupRow, ...subGroupRows];
     });
+  }
+
+  private getDisplayValue(row: SubGroupRow, field: string): string {
+    switch (field) {
+      case 'department':
+        return this.departmentMap.get(row.department) || '';
+      case 'status':
+        return this.statusMap.get(row.status)?.[0] || '';
+      case 'name':
+      case 'role':
+        return row[field as keyof Employee] as string;
+      default:
+        return '';
+    }
+  }
+
+  private compare(a: any, b: any, isAsc: boolean): number {
+    return (a < b ? -1 : a > b ? 1 : 0) * (isAsc ? 1 : -1);
   }
 
 }
