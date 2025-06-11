@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit } from '@angular/core';
 import { Employee } from './models/Employee';
 import { Department } from './models/Department';
 import { Status } from './models/Status';
@@ -16,9 +16,12 @@ import { MatFormField } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { FormsModule } from '@angular/forms';
+import { MatInputModule } from '@angular/material/input';
 
 import { CommonModule } from '@angular/common';
 import { Sort, MatSortModule } from '@angular/material/sort';
+import { ClickStopPropagationDirective } from './directives/click-stop-propagation.directive';
+import { debounceTime, Subject } from 'rxjs';
 
 
 // Group by various options -> DONE
@@ -26,11 +29,12 @@ import { Sort, MatSortModule } from '@angular/material/sort';
 // Add a new employee
 // Delete an employee
 // Save the changes to the employees
-// Filtering the sub rows by each column
+// Filtering the sub rows by each column -> DONE
 // Sorting by various options -> DONE
-// The group rows should have an counter of the number of employees in that group
-// The table should be responsive and adapt to the screen size
+// The group rows should have an counter of the number of employees in that group -> DONE
+// The table should be responsive and adapt to the screen size -> DONE
 // Checkboxes for selecting employees and a button to delete them
+// Optimization with trackBy -> DONE
 
 
 type groupByFields = 'department' | 'status' | 'role';
@@ -38,6 +42,7 @@ type RowType = GroupRow | SubGroupRow;
 
 @Component({
   selector: 'app-root',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     MatTableModule,
     MatCheckboxModule,
@@ -47,11 +52,15 @@ type RowType = GroupRow | SubGroupRow;
     MatSelectModule,
     MatFormFieldModule,
     MatSortModule,
-    FormsModule],
+    FormsModule,
+    MatInputModule ,
+    ClickStopPropagationDirective],
   templateUrl: './app.component.html',
   styleUrl: './app.component.css'
 })
 export class AppComponent implements OnInit {
+  filterChanged$ = new Subject<void>();
+  
   title = 'Employee Management System';
   employees: Employee[] = [];
   departments: Department[] = [];
@@ -75,12 +84,16 @@ export class AppComponent implements OnInit {
 
   ngOnInit() {
     // Retrieve data from the services. First the employees, then the departments and statuses.
-    this.employees = this.dataService.generateMockEmployees(50);
+    this.employees = this.dataService.generateMockEmployees(1000);
     this.departments = this.departmentService.getDepartments();
     this.statuses = this.statusService.getStatuses();
 
     this.departmentMap = new Map(this.departments.map(dep => [dep.id, dep.name]));
     this.statusMap = new Map(this.statuses.map(status => [status.id, [status.label, status.color]]));
+
+    this.filterChanged$.pipe(
+      debounceTime(300) // 300ms delay after typing
+    ).subscribe(() => this.applyColumnFilters());
 
     this.dataSource.data = this.groupBy(this.selectedGroupBy, this.employees);
   }
@@ -134,6 +147,36 @@ export class AppComponent implements OnInit {
     }
 
     this.dataSource.data = newData;
+  }
+
+  trackByRow(index: number, row: RowType): string | number {
+    if (row.isGroup) {
+      // For a group row, use a combination of groupName (or a unique group ID if you have one)
+      // and a prefix to ensure it's unique from sub-row IDs.
+      return `group-${row.groupName}`;
+    } else {
+      // For a sub-row (employee), use its unique 'id'.
+      return row.id;
+    }
+  }
+
+  columnFilters: Record<'name' | 'department' | 'role' | 'status', string> = {
+    name: '',
+    department: '',
+    role: '',
+    status: ''
+  };
+
+
+  applyColumnFilters() {
+    const filtered = this.employees.filter(emp => {
+      return (!this.columnFilters.name || emp.name.toLowerCase().includes(this.columnFilters.name.toLowerCase())) && 
+        (!this.columnFilters.department || this.departmentMap.get(emp.department)?.toLowerCase().includes(this.columnFilters.department.toLowerCase())) &&
+        (!this.columnFilters.role || emp.role.toLowerCase().includes(this.columnFilters.role.toLowerCase())) &&
+        (!this.columnFilters.status || this.statusMap.get(emp.status)?.[0].toLowerCase().includes(this.columnFilters.status.toLowerCase()));
+    });
+
+    this.dataSource.data = this.groupBy(this.selectedGroupBy, filtered);
   }
 
   /** Group rows by a specific field and return a list of Group rows followed by their Sub Group rows */
@@ -192,6 +235,11 @@ export class AppComponent implements OnInit {
 
   private compare(a: any, b: any, isAsc: boolean): number {
     return (a < b ? -1 : a > b ? 1 : 0) * (isAsc ? 1 : -1);
+  }
+
+  ngOnDestroy() {
+    this.filterChanged$.next();
+    this.filterChanged$.complete();
   }
 
 }
