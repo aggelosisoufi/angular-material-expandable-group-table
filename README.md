@@ -18,3 +18,7 @@ Once the server is running, open your browser and navigate to `http://localhost:
 ## 🔗 Live Demo
 
 [Click here to open the app on StackBlitz 🚀](https://stackblitz.com/~/github.com/aggelosisoufi/angular-material-expandable-group-table?file=src/app/app.component.html)
+
+## 🔗 Live Demo (Netlify)
+
+[View the app live on Netlify](https://heroic-druid-d0311b.netlify.app)
